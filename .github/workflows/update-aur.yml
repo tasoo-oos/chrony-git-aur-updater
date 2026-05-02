@@ -2,7 +2,7 @@ name: Update AUR metadata
 
 on:
   schedule:
-    - cron: '17 3 * * *'
+    - cron: '0 */6 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
