@@ -34,7 +34,7 @@ jobs:
           pacman -Syu --noconfirm --needed base-devel git openssh sudo
 
       - name: Check out automation repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Create unprivileged build user
         run: |
@@ -61,6 +61,7 @@ jobs:
           sudo -u builder -H env \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             RUNNER_TEMP="$RUNNER_TEMP" \
+            WORKDIR="/home/builder/aur-update-$PKGBASE" \
             PKGBASE="$PKGBASE" \
             AUR_REMOTE="$AUR_REMOTE" \
             DRY_RUN="$DRY_RUN" \
