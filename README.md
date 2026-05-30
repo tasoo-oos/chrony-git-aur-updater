@@ -18,6 +18,8 @@ The workflow does not publish binary packages. It refreshes the VCS package vers
 10. It regenerates `.SRCINFO` with `makepkg --printsrcinfo`.
 11. It commits and pushes only when `PKGBUILD`, `.SRCINFO`, or `.aur-link-signature` changed.
 
+The link signature is generated in the workflow's minimal current Arch container. Keep optional build features explicit in the AUR `PKGBUILD`; environment-dependent auto-detected libraries can otherwise create noisy signature changes.
+
 ## Required GitHub secret
 
 Add this repository secret:

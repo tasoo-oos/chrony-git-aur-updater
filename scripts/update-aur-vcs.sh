@@ -30,29 +30,69 @@ reset_pkgrel() {
     printf 'Reset pkgrel for new pkgver: %s -> 1\n' "${old_pkgrel}"
 }
 
+signatures_match() {
+    local old_signature_file new_signature_file normalized_new
+
+    old_signature_file="$1"
+    new_signature_file="$2"
+
+    if cmp -s "${old_signature_file}" "${new_signature_file}"; then
+        return 0
+    fi
+
+    # Support migration from the original path-only signature format.
+    if grep -q '^/' "${old_signature_file}"; then
+        normalized_new="$(mktemp --tmpdir="${workdir}" normalized-signature.XXXXXX)"
+        sed 's|^[^/]*/|/|' "${new_signature_file}" > "${normalized_new}"
+        if cmp -s "${old_signature_file}" "${normalized_new}"; then
+            rm -f -- "${normalized_new}"
+            return 0
+        fi
+        rm -f -- "${normalized_new}"
+    fi
+
+    return 1
+}
+
+signature_exists() {
+    [[ -s "${link_signature_file}" ]]
+}
+
 write_link_signature() {
-    local extract_dir package
+    local extract_dir package package_dir package_name signature_tmp
 
     extract_dir="$(mktemp -d --tmpdir="${workdir}" link-signature.XXXXXX)"
+    signature_tmp="$(mktemp --tmpdir="${workdir}" link-signature-output.XXXXXX)"
+    trap 'rm -rf -- "${extract_dir}" "${signature_tmp}"' RETURN
+
     while IFS= read -r package; do
-        bsdtar -xf "${package}" -C "${extract_dir}"
+        package_name="$(bsdtar -xOf "${package}" .PKGINFO | sed -n 's/^pkgname = //p' | head -n1)"
+        if [[ -z "${package_name}" ]]; then
+            printf 'Cannot read pkgname from package: %s\n' "${package}" >&2
+            return 1
+        fi
+
+        package_dir="${extract_dir}/${package_name}"
+        mkdir -p -- "${package_dir}"
+        bsdtar -xf "${package}" -C "${package_dir}"
+
+        find "${package_dir}" -type f -print0 |
+            while IFS= read -r -d '' file; do
+                if readelf -h "${file}" >/dev/null 2>&1; then
+                    readelf -d "${file}" 2>/dev/null |
+                        awk -v package="${package_name}" -v path="${file#"${package_dir}"}" '/Shared library:/ {
+                            lib = $0
+                            sub(/^.*Shared library: \[/, "", lib)
+                            sub(/\].*$/, "", lib)
+                            print package path ": " lib
+                        }'
+                fi
+            done >> "${signature_tmp}"
     done < <(makepkg --packagelist)
 
-    find "${extract_dir}" -type f -print0 |
-        while IFS= read -r -d '' file; do
-            if readelf -h "${file}" >/dev/null 2>&1; then
-                readelf -d "${file}" 2>/dev/null |
-                    awk -v path="${file#"${extract_dir}"}" '/Shared library:/ {
-                        lib = $0
-                        sub(/^.*Shared library: \[/, "", lib)
-                        sub(/\].*$/, "", lib)
-                        print path ": " lib
-                    }'
-            fi
-        done |
-        LC_ALL=C sort -u > "${link_signature_file}"
-
-    rm -rf -- "${extract_dir}"
+    LC_ALL=C sort -u "${signature_tmp}" > "${link_signature_file}"
+    rm -rf -- "${extract_dir}" "${signature_tmp}"
+    trap - RETURN
 }
 
 if [[ -z "${workdir}" || "${workdir}" == "/" ]]; then
@@ -82,7 +122,7 @@ new_pkgver="$(sed -n 's/^pkgver=//p' PKGBUILD | head -n1)"
 
 if [[ "${old_pkgver}" != "${new_pkgver}" ]]; then
     reset_pkgrel
-elif ! cmp -s "${old_signature}" "${link_signature_file}"; then
+elif signature_exists && ! signatures_match "${old_signature}" "${link_signature_file}"; then
     printf 'Link signature changed while pkgver stayed at %s. Rebuild release needed.\n' "${new_pkgver}"
     bump_pkgrel
 fi
