@@ -14,7 +14,7 @@ The workflow does not publish binary packages. It refreshes the VCS package vers
 6. It runs `makepkg --nobuild --nodeps --noconfirm`, which fetches the VCS source and lets `pkgver()` update `PKGBUILD`.
 7. It builds the package with `makepkg --syncdeps --noconfirm --needed`.
 8. It extracts the built package and records ELF `NEEDED` shared library SONAMEs in `.aur-link-signature`.
-9. If the link signature changed while `pkgver` stayed the same, it bumps `pkgrel` so AUR helpers rebuild the package.
+9. If `pkgver` changed, it resets `pkgrel` to `1`; otherwise, if the link signature changed, it bumps `pkgrel` so AUR helpers rebuild the package.
 10. It regenerates `.SRCINFO` with `makepkg --printsrcinfo`.
 11. It commits and pushes only when `PKGBUILD`, `.SRCINFO`, or `.aur-link-signature` changed.
 

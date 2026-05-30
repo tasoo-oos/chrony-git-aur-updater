@@ -22,6 +22,14 @@ bump_pkgrel() {
     printf 'Bumped pkgrel: %s -> %s\n' "${old_pkgrel}" "${new_pkgrel}"
 }
 
+reset_pkgrel() {
+    local old_pkgrel
+
+    old_pkgrel="$(sed -n 's/^pkgrel=//p' PKGBUILD | head -n1)"
+    sed -i 's/^pkgrel=.*/pkgrel=1/' PKGBUILD
+    printf 'Reset pkgrel for new pkgver: %s -> 1\n' "${old_pkgrel}"
+}
+
 write_link_signature() {
     local extract_dir package
 
@@ -72,7 +80,9 @@ write_link_signature
 
 new_pkgver="$(sed -n 's/^pkgver=//p' PKGBUILD | head -n1)"
 
-if [[ "${old_pkgver}" == "${new_pkgver}" ]] && ! cmp -s "${old_signature}" "${link_signature_file}"; then
+if [[ "${old_pkgver}" != "${new_pkgver}" ]]; then
+    reset_pkgrel
+elif ! cmp -s "${old_signature}" "${link_signature_file}"; then
     printf 'Link signature changed while pkgver stayed at %s. Rebuild release needed.\n' "${new_pkgver}"
     bump_pkgrel
 fi
